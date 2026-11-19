@@ -13,13 +13,15 @@ main{max-width:640px;margin:0 auto;padding:16px 14px 60px}
 h1{font-size:22px;margin:4px 0 14px}h2{font-size:16px;margin:22px 0 8px}
 .card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px;margin-bottom:10px}
 .row{display:flex;align-items:center;gap:10px;justify-content:space-between}
+.line{padding-top:8px;margin-top:8px;border-top:1px solid var(--bd)}
 .nm{font-weight:600}.mu{color:var(--mu);font-size:14px}.bad{color:var(--bad)}.ok{color:var(--ok)}
 .qty{display:flex;align-items:center;gap:8px}
 .qty button{width:34px;height:34px;border-radius:50%;border:1px solid var(--bd);background:var(--card);color:var(--tx);font-size:18px}
 .btn{display:block;width:100%;text-align:center;text-decoration:none;border:0;border-radius:10px;padding:13px;background:var(--ac);color:var(--acx);font-size:16px;font-weight:600;margin-top:10px}
 .btn.sec{background:transparent;color:var(--tx);border:1px solid var(--bd)}
 .btn[aria-disabled="true"]{opacity:.45;pointer-events:none}
-input,textarea,select{width:100%;padding:10px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);font:inherit;margin-top:6px}
+.btn:disabled{opacity:.45}
+input,textarea{width:100%;padding:10px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);font:inherit;margin-top:6px}
 .code{font-size:20px;font-weight:700;letter-spacing:1px}
 #msg{position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));background:var(--tx);color:var(--bg);padding:10px 14px;border-radius:10px;display:none;z-index:5}
 </style></head>
@@ -29,50 +31,60 @@ input,textarea,select{width:100%;padding:10px;border:1px solid var(--bd);border-
 const CONFIG={
   tienda:'Café Pechené',
   wa:'',            // WhatsApp con indicativo, ej. 573001234567
-  productosCSV:'',  // enlace CSV publicado de la pestaña “Productos” (nombre, precio, stock)
-  estadosCSV:''     // enlace CSV publicado de la pestaña “Estados” (codigo, estado)
+  productosCSV:'',  // enlace CSV de la pestaña “Productos”: nombre, precio, grano, molido
+  estadosCSV:''     // enlace CSV de la pestaña “Estados”: codigo, estado
 };
-/* Productos de respaldo si no hay hoja conectada (stock de ejemplo) */
+/* Respaldo si no hay hoja conectada. g = stock en grano, m = stock molido (null = no se ofrece) */
 let products=[
-  {id:'0',name:'Castillo 440 g',price:45000,stock:10},
-  {id:'1',name:'Bourbón Rosado 250 g',price:40000,stock:10},
-  {id:'2',name:'Geisha 250 g',price:50000,stock:10}
+  {id:'0',name:'Castillo 440 g',price:45000,g:10,m:10},
+  {id:'1',name:'Bourbón Rosado 250 g',price:40000,g:10,m:10},
+  {id:'2',name:'Geisha 250 g',price:50000,g:10,m:10},
+  {id:'3',name:'Castillo 2500 g',price:220000,g:10,m:null}
 ];
-let cart={},cust={name:'',note:'',tipo:'Molido'},look='',lookRes='';
+const FORMS=[['g','Grano'],['m','Molido']];
+let cart={},cust={name:'',note:''},look='',lookRes='';
 const code='PE-'+Math.floor(1000+Math.random()*9000);
 const app=document.getElementById('app');
 const cop=n=>new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0}).format(n||0);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const num=v=>parseInt(String(v).replace(/\D/g,''),10)||0;
+const stk=v=>String(v||'').trim()===''?null:num(v);
 function msg(t){const m=document.getElementById('msg');m.textContent=t;m.style.display='block';setTimeout(()=>m.style.display='none',3500)}
 function csv(t){return t.trim().split(/\r?\n/).map(l=>{const r=[];let c='',q=false;for(const ch of l){if(ch==='"')q=!q;else if(ch===','&&!q){r.push(c);c=''}else c+=ch}r.push(c);return r.map(s=>s.trim())})}
 async function load(u){const r=await fetch(u+(u.includes('?')?'&':'?')+'t='+Date.now());if(!r.ok)throw 0;return csv(await r.text()).slice(1)}
+function lines(){return Object.entries(cart).map(([key,q])=>{const [id,k]=key.split('|'),p=products.find(x=>x.id===id);return p?{q,name:p.name,form:k==='g'?'Grano':'Molido',sub:q*p.price}:null}).filter(Boolean)}
 function orderText(){
-  const L=products.filter(p=>cart[p.id]).map(p=>`• ${cart[p.id]} x ${p.name} — ${cop(cart[p.id]*p.price)}`);
-  const t=products.reduce((a,p)=>a+(cart[p.id]||0)*p.price,0);
-  return `Hola, quiero hacer un pedido en ${CONFIG.tienda}.\nCódigo: ${code}\n${L.join('\n')}\nPresentación: ${cust.tipo}\nTotal: ${cop(t)}\nNombre: ${cust.name||'—'}`+(cust.note?`\nNotas: ${cust.note}`:'');
+  const L=lines(),t=L.reduce((a,l)=>a+l.sub,0);
+  return `Hola, quiero hacer un pedido en ${CONFIG.tienda}.\nCódigo: ${code}\n${L.map(l=>`• ${l.q} x ${l.name} (${l.form}) — ${cop(l.sub)}`).join('\n')}\nTotal: ${cop(t)}\nNombre: ${cust.name||'—'}`+(cust.note?`\nNotas: ${cust.note}`:'');
 }
 function render(){
-  const n=Object.values(cart).reduce((a,b)=>a+b,0),t=products.reduce((a,p)=>a+(cart[p.id]||0)*p.price,0);
+  const L=lines(),n=L.reduce((a,l)=>a+l.q,0),t=L.reduce((a,l)=>a+l.sub,0);
   const wa=CONFIG.wa?`https://wa.me/${CONFIG.wa}?text=${encodeURIComponent(orderText())}`:'';
-  app.innerHTML=`<h1>${esc(CONFIG.tienda)}</h1>`+products.map(p=>{
-    const q=cart[p.id]||0,out=p.stock<=0;
-    return `<div class="card row"><div><div class="nm">${esc(p.name)}</div><div class="mu">${cop(p.price)} · ${out?'<span class="bad">Agotado</span>':'<span class="ok">'+p.stock+' disponibles</span>'}</div></div>
-    ${out?'':`<div class="qty"><button data-act="dec" data-id="${p.id}">−</button><b>${q}</b><button data-act="inc" data-id="${p.id}">+</button></div>`}</div>`}).join('')+
-  `<h2>Tu pedido</h2><div class="card"><input data-c="name" placeholder="Tu nombre" value="${esc(cust.name)}">
-  <select data-c="tipo"><option${cust.tipo==='Molido'?' selected':''}>Molido</option><option${cust.tipo==='Grano'?' selected':''}>Grano</option></select>
+  app.innerHTML=`<h1>${esc(CONFIG.tienda)}</h1>`+products.map(p=>
+    `<div class="card"><div class="nm">${esc(p.name)}</div><div class="mu">${cop(p.price)}</div>`+
+    FORMS.filter(([k])=>p[k]!==null).map(([k,l])=>{
+      const key=p.id+'|'+k,q=cart[key]||0,out=p[k]<=0;
+      return `<div class="row line"><span>${l} · ${out?'<span class="bad">Agotado</span>':'<span class="ok">'+p[k]+' disponibles</span>'}</span>${out?'':`<div class="qty"><button data-act="dec" data-key="${key}">−</button><b>${q}</b><button data-act="inc" data-key="${key}">+</button></div>`}</div>`}).join('')+`</div>`).join('')+
+  `<h2>Tus datos</h2><div class="card"><input data-c="name" placeholder="Tu nombre" value="${esc(cust.name)}">
   <textarea data-c="note" rows="2" placeholder="Dirección o notas del pedido">${esc(cust.note)}</textarea></div>
-  <div class="card"><div class="row"><span>${n} producto${n==1?'':'s'}</span><b>${cop(t)}</b></div>
+  <h2>Revisa tu pedido</h2><div class="card">
+  ${n?L.map(l=>`<div class="row mu" style="margin-bottom:6px"><span>${l.q} × ${esc(l.name)} · ${l.form}</span><span>${cop(l.sub)}</span></div>`).join(''):'<div class="mu">Aún no has elegido productos.</div>'}
+  <div class="row" style="margin-top:8px"><b>Total</b><b>${cop(t)}</b></div>
   <div class="mu" style="margin-top:8px">Código de tu pedido: <span class="code">${code}</span><br>Guárdalo para consultar el estado.</div>
   ${wa?`<a class="btn" target="_blank" rel="noopener" href="${wa}" aria-disabled="${n==0}">Enviar pedido por WhatsApp</a>`:''}
-  <button class="btn ${wa?'sec':''}" data-act="copy" ${n==0?'disabled':''}>Copiar pedido</button></div>
+  <button class="btn ${wa?'sec':''}" data-act="copy" ${n==0?'disabled':''}>Copiar pedido</button>
+  ${n?`<button class="btn sec" data-act="clear">Vaciar pedido</button>`:''}
+  <div class="mu" style="margin-top:10px">Tu pedido se envía cuando presiones “Enviar” en WhatsApp. Si te equivocas después de enviarlo, escríbenos con tu código.</div></div>
   <h2>Consultar un pedido</h2><div class="card"><input data-l="1" placeholder="Código, ej. PE-1234" value="${esc(look)}">
   <button class="btn sec" data-act="look">Ver estado</button><div id="res" class="nm" style="margin-top:10px">${esc(lookRes)}</div></div>`;
 }
 app.addEventListener('click',async e=>{
-  const b=e.target.closest('[data-act]');if(!b)return;const a=b.dataset.act,id=b.dataset.id,p=products.find(x=>x.id===id);
-  if(a==='inc'&&p){cart[id]=Math.min(p.stock,(cart[id]||0)+1);render()}
-  else if(a==='dec'&&p){cart[id]=Math.max(0,(cart[id]||0)-1);if(!cart[id])delete cart[id];render()}
+  const b=e.target.closest('[data-act]');if(!b)return;const a=b.dataset.act,key=b.dataset.key;
+  if(a==='inc'||a==='dec'){
+    const [id,k]=key.split('|'),p=products.find(x=>x.id===id);if(!p)return;
+    cart[key]=Math.max(0,Math.min(p[k],(cart[key]||0)+(a==='inc'?1:-1)));if(!cart[key])delete cart[key];render();
+  }
+  else if(a==='clear'){cart={};render()}
   else if(a==='copy'){try{await navigator.clipboard.writeText(orderText());msg('Pedido copiado')}catch(_){msg('No se pudo copiar')}}
   else if(a==='look'){
     const k=look.trim().toUpperCase();if(!k)return;
@@ -85,10 +97,9 @@ app.addEventListener('click',async e=>{
   }
 });
 app.addEventListener('input',e=>{const t=e.target;if(t.dataset.c)cust[t.dataset.c]=t.value;if(t.dataset.l)look=t.value});
-app.addEventListener('change',e=>{if(e.target.dataset.c==='tipo')render()});
 render();
 if(CONFIG.productosCSV)load(CONFIG.productosCSV).then(rows=>{
-  const p=rows.filter(r=>r[0]).map((r,i)=>({id:String(i),name:r[0],price:num(r[1]),stock:num(r[2])}));
-  if(p.length){products=p;render()}
+  const p=rows.filter(r=>r[0]).map((r,i)=>({id:String(i),name:r[0],price:num(r[1]),g:stk(r[2]),m:stk(r[3])}));
+  if(p.length){products=p;cart={};render()}
 }).catch(()=>{});
 </script></body></html>
