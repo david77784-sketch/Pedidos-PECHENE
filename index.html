@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Café Pechené · Pedidos</title>
+<style>
+:root{--bg:#faf8f5;--card:#fff;--tx:#1f1b16;--mu:#7a7167;--ac:#b4541a;--acx:#fff;--bd:#e7e0d6;--ok:#2e7d4f;--bad:#b3261e;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#16130f;--card:#221e19;--tx:#f1ebe3;--mu:#a39a8f;--ac:#e08a4f;--acx:#1a1208;--bd:#363029;--ok:#6fcf97;--bad:#f2867f;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#16130f;--card:#221e19;--tx:#f1ebe3;--mu:#a39a8f;--ac:#e08a4f;--acx:#1a1208;--bd:#363029;--ok:#6fcf97;--bad:#f2867f;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:640px;margin:0 auto;padding:16px 14px 60px}
+h1{font-size:22px;margin:4px 0 14px}h2{font-size:16px;margin:22px 0 8px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px;margin-bottom:10px}
+.row{display:flex;align-items:center;gap:10px;justify-content:space-between}
+.nm{font-weight:600}.mu{color:var(--mu);font-size:14px}.bad{color:var(--bad)}.ok{color:var(--ok)}
+.qty{display:flex;align-items:center;gap:8px}
+.qty button{width:34px;height:34px;border-radius:50%;border:1px solid var(--bd);background:var(--card);color:var(--tx);font-size:18px}
+.btn{display:block;width:100%;text-align:center;text-decoration:none;border:0;border-radius:10px;padding:13px;background:var(--ac);color:var(--acx);font-size:16px;font-weight:600;margin-top:10px}
+.btn.sec{background:transparent;color:var(--tx);border:1px solid var(--bd)}
+.btn[aria-disabled="true"]{opacity:.45;pointer-events:none}
+input,textarea,select{width:100%;padding:10px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);font:inherit;margin-top:6px}
+.code{font-size:20px;font-weight:700;letter-spacing:1px}
+#msg{position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));background:var(--tx);color:var(--bg);padding:10px 14px;border-radius:10px;display:none;z-index:5}
+</style></head>
+<body><main id="app"></main><div id="msg"></div>
+<script>
+/* ====== CONFIGURACIÓN (lo único que editas) ====== */
+const CONFIG={
+  tienda:'Café Pechené',
+  wa:'',            // WhatsApp con indicativo, ej. 573001234567
+  productosCSV:'',  // enlace CSV publicado de la pestaña “Productos” (nombre, precio, stock)
+  estadosCSV:''     // enlace CSV publicado de la pestaña “Estados” (codigo, estado)
+};
+/* Productos de respaldo si no hay hoja conectada (stock de ejemplo) */
+let products=[
+  {id:'0',name:'Castillo 440 g',price:45000,stock:10},
+  {id:'1',name:'Bourbón Rosado 250 g',price:40000,stock:10},
+  {id:'2',name:'Geisha 250 g',price:50000,stock:10}
+];
+let cart={},cust={name:'',note:'',tipo:'Molido'},look='',lookRes='';
+const code='PE-'+Math.floor(1000+Math.random()*9000);
+const app=document.getElementById('app');
+const cop=n=>new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0}).format(n||0);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const num=v=>parseInt(String(v).replace(/\D/g,''),10)||0;
+function msg(t){const m=document.getElementById('msg');m.textContent=t;m.style.display='block';setTimeout(()=>m.style.display='none',3500)}
+function csv(t){return t.trim().split(/\r?\n/).map(l=>{const r=[];let c='',q=false;for(const ch of l){if(ch==='"')q=!q;else if(ch===','&&!q){r.push(c);c=''}else c+=ch}r.push(c);return r.map(s=>s.trim())})}
+async function load(u){const r=await fetch(u+(u.includes('?')?'&':'?')+'t='+Date.now());if(!r.ok)throw 0;return csv(await r.text()).slice(1)}
+function orderText(){
+  const L=products.filter(p=>cart[p.id]).map(p=>`• ${cart[p.id]} x ${p.name} — ${cop(cart[p.id]*p.price)}`);
+  const t=products.reduce((a,p)=>a+(cart[p.id]||0)*p.price,0);
+  return `Hola, quiero hacer un pedido en ${CONFIG.tienda}.\nCódigo: ${code}\n${L.join('\n')}\nPresentación: ${cust.tipo}\nTotal: ${cop(t)}\nNombre: ${cust.name||'—'}`+(cust.note?`\nNotas: ${cust.note}`:'');
+}
+function render(){
+  const n=Object.values(cart).reduce((a,b)=>a+b,0),t=products.reduce((a,p)=>a+(cart[p.id]||0)*p.price,0);
+  const wa=CONFIG.wa?`https://wa.me/${CONFIG.wa}?text=${encodeURIComponent(orderText())}`:'';
+  app.innerHTML=`<h1>${esc(CONFIG.tienda)}</h1>`+products.map(p=>{
+    const q=cart[p.id]||0,out=p.stock<=0;
+    return `<div class="card row"><div><div class="nm">${esc(p.name)}</div><div class="mu">${cop(p.price)} · ${out?'<span class="bad">Agotado</span>':'<span class="ok">'+p.stock+' disponibles</span>'}</div></div>
+    ${out?'':`<div class="qty"><button data-act="dec" data-id="${p.id}">−</button><b>${q}</b><button data-act="inc" data-id="${p.id}">+</button></div>`}</div>`}).join('')+
+  `<h2>Tu pedido</h2><div class="card"><input data-c="name" placeholder="Tu nombre" value="${esc(cust.name)}">
+  <select data-c="tipo"><option${cust.tipo==='Molido'?' selected':''}>Molido</option><option${cust.tipo==='Grano'?' selected':''}>Grano</option></select>
+  <textarea data-c="note" rows="2" placeholder="Dirección o notas del pedido">${esc(cust.note)}</textarea></div>
+  <div class="card"><div class="row"><span>${n} producto${n==1?'':'s'}</span><b>${cop(t)}</b></div>
+  <div class="mu" style="margin-top:8px">Código de tu pedido: <span class="code">${code}</span><br>Guárdalo para consultar el estado.</div>
+  ${wa?`<a class="btn" target="_blank" rel="noopener" href="${wa}" aria-disabled="${n==0}">Enviar pedido por WhatsApp</a>`:''}
+  <button class="btn ${wa?'sec':''}" data-act="copy" ${n==0?'disabled':''}>Copiar pedido</button></div>
+  <h2>Consultar un pedido</h2><div class="card"><input data-l="1" placeholder="Código, ej. PE-1234" value="${esc(look)}">
+  <button class="btn sec" data-act="look">Ver estado</button><div id="res" class="nm" style="margin-top:10px">${esc(lookRes)}</div></div>`;
+}
+app.addEventListener('click',async e=>{
+  const b=e.target.closest('[data-act]');if(!b)return;const a=b.dataset.act,id=b.dataset.id,p=products.find(x=>x.id===id);
+  if(a==='inc'&&p){cart[id]=Math.min(p.stock,(cart[id]||0)+1);render()}
+  else if(a==='dec'&&p){cart[id]=Math.max(0,(cart[id]||0)-1);if(!cart[id])delete cart[id];render()}
+  else if(a==='copy'){try{await navigator.clipboard.writeText(orderText());msg('Pedido copiado')}catch(_){msg('No se pudo copiar')}}
+  else if(a==='look'){
+    const k=look.trim().toUpperCase();if(!k)return;
+    if(!CONFIG.estadosCSV){lookRes='La consulta de estado aún no está activa.';render();return}
+    lookRes='Buscando…';render();
+    try{const f=(await load(CONFIG.estadosCSV)).find(r=>(r[0]||'').toUpperCase()===k);
+      lookRes=f?`Estado de ${k}: ${f[1]}`:'Aún no aparece ese código. Revisa que esté bien escrito o escríbenos por WhatsApp.'}
+    catch(_){lookRes='No pudimos consultar el estado ahora. Intenta de nuevo en un momento.'}
+    render();
+  }
+});
+app.addEventListener('input',e=>{const t=e.target;if(t.dataset.c)cust[t.dataset.c]=t.value;if(t.dataset.l)look=t.value});
+app.addEventListener('change',e=>{if(e.target.dataset.c==='tipo')render()});
+render();
+if(CONFIG.productosCSV)load(CONFIG.productosCSV).then(rows=>{
+  const p=rows.filter(r=>r[0]).map((r,i)=>({id:String(i),name:r[0],price:num(r[1]),stock:num(r[2])}));
+  if(p.length){products=p;render()}
+}).catch(()=>{});
+</script></body></html>
