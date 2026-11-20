@@ -65,20 +65,26 @@ function render(){
     FORMS.filter(([k])=>p[k]!==null).map(([k,l])=>{
       const key=p.id+'|'+k,q=cart[key]||0,out=p[k]<=0;
       return `<div class="row line"><span>${l} · ${out?'<span class="bad">Agotado</span>':'<span class="ok">'+p[k]+' disponibles</span>'}</span>${out?'':`<div class="qty"><button data-act="dec" data-key="${key}">−</button><b>${q}</b><button data-act="inc" data-key="${key}">+</button></div>`}</div>`}).join('')+`</div>`).join('')+
-  `<h2>Tus datos</h2><div class="card"><input data-c="name" placeholder="Tu nombre" value="${esc(cust.name)}">
+  `<h2>Tus datos</h2><div class="card"><input data-c="name" placeholder="Tu nombre (obligatorio)" value="${esc(cust.name)}">
   <textarea data-c="note" rows="2" placeholder="Dirección o notas del pedido">${esc(cust.note)}</textarea></div>
   <h2>Revisa tu pedido</h2><div class="card">
   ${n?L.map(l=>`<div class="row mu" style="margin-bottom:6px"><span>${l.q} × ${esc(l.name)} · ${l.form}</span><span>${cop(l.sub)}</span></div>`).join(''):'<div class="mu">Aún no has elegido productos.</div>'}
   <div class="row" style="margin-top:8px"><b>Total</b><b>${cop(t)}</b></div>
   <div class="mu" style="margin-top:8px">Código de tu pedido: <span class="code">${code}</span><br>Guárdalo para consultar el estado.</div>
-  ${wa?`<a class="btn" target="_blank" rel="noopener" href="${wa}" aria-disabled="${n==0}">Enviar pedido por WhatsApp</a>`:''}
+  ${wa?`<a id="wa" class="btn" target="_blank" rel="noopener" href="${wa}" aria-disabled="${n==0||!cust.name.trim()}">Enviar pedido por WhatsApp</a>`:''}
   <button class="btn ${wa?'sec':''}" data-act="copy" ${n==0?'disabled':''}>Copiar pedido</button>
   ${n?`<button class="btn sec" data-act="clear">Vaciar pedido</button>`:''}
   <div class="mu" style="margin-top:10px">Tu pedido se envía cuando presiones “Enviar” en WhatsApp. Si te equivocas después de enviarlo, escríbenos con tu código.</div></div>
   <h2>Consultar un pedido</h2><div class="card"><input data-l="1" placeholder="Código, ej. PE-1234" value="${esc(look)}">
   <button class="btn sec" data-act="look">Ver estado</button><div id="res" class="nm" style="margin-top:10px">${esc(lookRes)}</div></div>`;
 }
+function updWa(){
+  const a=document.getElementById('wa');if(!a||!CONFIG.wa)return;
+  a.href=`https://wa.me/${CONFIG.wa}?text=${encodeURIComponent(orderText())}`;
+  a.setAttribute('aria-disabled',String(lines().length==0||!cust.name.trim()));
+}
 app.addEventListener('click',async e=>{
+  if(e.target.closest('#wa')){updWa();return}
   const b=e.target.closest('[data-act]');if(!b)return;const a=b.dataset.act,key=b.dataset.key;
   if(a==='inc'||a==='dec'){
     const [id,k]=key.split('|'),p=products.find(x=>x.id===id);if(!p)return;
@@ -96,7 +102,7 @@ app.addEventListener('click',async e=>{
     render();
   }
 });
-app.addEventListener('input',e=>{const t=e.target;if(t.dataset.c)cust[t.dataset.c]=t.value;if(t.dataset.l)look=t.value});
+app.addEventListener('input',e=>{const t=e.target;if(t.dataset.c){cust[t.dataset.c]=t.value;updWa()}if(t.dataset.l)look=t.value});
 render();
 if(CONFIG.productosCSV)load(CONFIG.productosCSV).then(rows=>{
   const p=rows.filter(r=>r[0]).map((r,i)=>({id:String(i),name:r[0],price:num(r[1]),g:stk(r[2]),m:stk(r[3])}));
